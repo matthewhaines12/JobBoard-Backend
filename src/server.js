@@ -2,10 +2,12 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const jobsRouter = require("./routes/jobs");
 const authRouter = require("./routes/auth");
+const savedJobsRouter = require("./routes/users");
 const Job = require("./models/Job");
-const User = require("./models/User");
+// const User = require("./models/User");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,10 +23,17 @@ mongoose
   })
   .catch((err) => console.error("MongoDB connection error:", err));
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true, // allow cookies
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 app.use("/api/jobs", jobsRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/users", savedJobsRouter);
 
 app.get("/", (req, res) => {
   res.send("Job Board Backend is running");

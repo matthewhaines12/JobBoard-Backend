@@ -1,32 +1,31 @@
 const express = require("express");
+const router = express.Router();
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const dotenv = require("dotenv");
 
-const router = express.Router();
-dotenv.config();
+const JWT_ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const JWT_REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
 
-const secretKey = process.env.ACCESS_TOKEN_SECRET;
+const generateAccessToken = (userID) => {
+  return jwt.sign({ userID }, JWT_ACCESS_SECRET, { expiresIn: "1h" });
+};
 
-const generateAccessToken = (user) => {
-  const payload = {
-    userID: user._id,
-  };
-  return jwt.sign(payload, secretKey, { expiresIn: "1h" });
+// only stored in the server - http only cookie
+const generateRefreshToken = (userID) => {
+  return jwt.sign({ userID }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
 };
 
 // Post request - receive data from frontend
 router.post("/signup", async (req, res) => {
   try {
-    console.log("Entering the signup route");
     const { email, password } = req.body;
 
     // Validate the input
     if (!email || !password) {
       return res
         .status(400)
-        .json({ error: "Please provde email and password" });
+        .json({ error: "Please provide email and password" });
     }
 
     const userExists = await User.findOne({ email });
@@ -39,20 +38,28 @@ router.post("/signup", async (req, res) => {
 
     // Save new user to DB
     const newUser = new User({
-      email: email,
+      email,
       password: hashedPassword,
     });
     await newUser.save();
 
-    const token = generateAccessToken(newUser);
+    const accessToken = generateAccessToken(newUser._id);
+    const refreshToken = generateRefreshToken(newUser._id);
 
     const userResponse = newUser.toObject();
-    delete userResponse.password;
+    delete userResponse.password; // Remove password object from user
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false, // local dev
+      sameSite: "Strict",
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+    });
 
     res.status(201).json({
       message: "User created successfully and logged in",
       user: userResponse,
-      token,
+      accessToken,
     });
   } catch (err) {
     console.error(err);
@@ -68,7 +75,7 @@ router.post("/login", async (req, res) => {
     if (!email || !password) {
       return res
         .status(400)
-        .json({ error: "Please provde email and password" });
+        .json({ error: "Please provide email and password" });
     }
     const user = await User.findOne({ email }).select("+password"); // include the password field
 
@@ -81,17 +88,70 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
 
     // generate JWT and return token
-    const token = generateAccessToken(user);
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
 
     const userResponse = user.toObject();
     delete userResponse.password;
 
-    // console.log("token: ", token);
-    res.json({ message: "Login successful", user: userResponse, token });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false, // local dev
+      sameSite: "Strict",
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+    });
+
+    res.status(200).json({
+      message: "Successfully logged in",
+      user: userResponse,
+      accessToken,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken)
+      return res.status(401).json({ error: "Refresh token does not exist" });
+
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+
+    // check if user exists still in db
+    const user = await User.findById(decoded.userID);
+    if (!user) return res.status(401).json({ error: "User no longer exist" });
+
+    const newAccessToken = generateAccessToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    setRefreshTokenCookie(newRefreshToken);
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: false, // local dev
+      sameSite: "Strict",
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+    });
+
+    res.status(200).json({ accessToken: newAccessToken });
+  } catch (err) {
+    console.error(err);
+    res.status(403).json({ error: "Invalid refresh token" });
+  }
+});
+
+router.post("/logout", (req, res) => {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: false, // local dev
+    sameSite: "Strict",
+  });
+
+  res.status(200).json({ message: "Successfully logged out" });
 });
 
 module.exports = router;
