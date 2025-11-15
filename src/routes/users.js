@@ -9,8 +9,8 @@ router.use(verifyAccessToken);
 // get all saved jobs for logged-in user
 router.get("/saved-jobs", async (req, res) => {
   try {
-    const userID = req.body.userID; // from verifyAccessToken middleware
-    const user = await User.findOne(userID);
+    const userID = req.userID; // from verifyAccessToken middleware
+    const user = await User.findById(userID);
 
     if (!user) return res.status(404).json({ error: "User doesn't exist" });
 
@@ -23,18 +23,48 @@ router.get("/saved-jobs", async (req, res) => {
 
 // save a job
 router.post("/save-jobs/:jobID", async (req, res) => {
-  const jobID = req.body.jobID;
-  const user = await User.findOne(userID);
+  try {
+    const jobID = req.params.jobID;
+    const userID = req.userID;
 
-  if (!user) return res.status(401).json({ error: "User doesn't exist" });
+    const user = await User.findByIdAndUpdate(
+      userID,
+      { $addToSet: { savedJobs: jobID } },
+      { new: true }
+    );
+
+    if (!user) return res.status(401).json({ error: "User doesn't exist" });
+
+    res
+      .status(200)
+      .json({ message: "Job saved successfully", savedJobs: user.savedJobs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // remove a saved job
 router.delete("/saved-jobs/:jobID", async (req, res) => {
-  const jobID = req.body.jobID;
-  const user = await User.findOne(userID);
+  try {
+    const jobID = req.params.jobID;
+    const userID = req.userID;
 
-  if (!user) return res.status(401).json({ error: "User doesn't exist" });
+    const user = await User.findByIdAndUpdate(
+      userID,
+      { $pull: { savedJobs: jobID } },
+      { new: true }
+    );
+
+    if (!user) return res.status(401).json({ error: "User doesn't exist" });
+
+    res
+      .status(200)
+      .json({ message: "Job removed successfully", savedJobs: user.savedJobs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 module.exports = router;

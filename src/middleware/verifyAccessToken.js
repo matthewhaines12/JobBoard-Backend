@@ -10,11 +10,12 @@ const verifyAccessToken = (req, res, next) => {
 
   const accessToken = authHeader.split(" ")[1];
 
-  jwt.verify(accessToken, JWT_ACCESS_SECRET, (err, decoded));
-  if (err) return res.status(403).json({ error: "Inalid access token" });
+  jwt.verify(accessToken, JWT_ACCESS_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ error: "Inalid access token" });
 
-  req.userID = decoded.userID;
-  next();
+    req.userID = decoded.userID;
+    next();
+  });
 };
 
 module.exports = verifyAccessToken;

@@ -105,6 +105,7 @@ router.post("/login", async (req, res) => {
       message: "Successfully logged in",
       user: userResponse,
       accessToken,
+      refreshToken,
     });
   } catch (err) {
     console.error(err);
@@ -128,8 +129,6 @@ router.post("/refresh", async (req, res) => {
     const newAccessToken = generateAccessToken(user._id);
     const newRefreshToken = generateRefreshToken(user._id);
 
-    setRefreshTokenCookie(newRefreshToken);
-
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
       secure: false, // local dev
@@ -137,7 +136,7 @@ router.post("/refresh", async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
 
-    res.status(200).json({ accessToken: newAccessToken });
+    res.status(200).json({ accessToken: newAccessToken, user });
   } catch (err) {
     console.error(err);
     res.status(403).json({ error: "Invalid refresh token" });
