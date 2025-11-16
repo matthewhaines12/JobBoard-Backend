@@ -24,25 +24,33 @@ mongoose
   .catch((err) => console.error("MongoDB connection error:", err));
 
 const allowedOrigins = [
-  "http://localhost:5173", // local development
-  process.env.CLIENT_URL, // production
+  "http://localhost:5173",
+  "https://job-junction-mu.vercel.app",
+  process.env.CLIENT_URL,
 ].filter(Boolean);
+
+console.log("Allowed CORS origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      console.log("Request from origin:", origin);
+      
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.indexOf(origin) === -1) {
-        const msg =
-          "The CORS policy for this site does not allow access from the specified Origin.";
+        const msg = `CORS blocked origin: ${origin}. Allowed: ${allowedOrigins.join(", ")}`;
+        console.error(msg);
         return callback(new Error(msg), false);
       }
       return callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/jobs", jobsRouter);
@@ -51,6 +59,14 @@ app.use("/api/users", savedJobsRouter);
 
 app.get("/", (req, res) => {
   res.send("Job Board Backend is running");
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    error: err.message || 'Internal server error',
+  });
 });
 
 // Start server
