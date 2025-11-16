@@ -28,13 +28,18 @@ const allowedOrigins = [
   "https://job-junction-mu.vercel.app",
 ].filter(Boolean);
 
+console.log("Allowed origins:", allowedOrigins);
+
 app.use(
   cors({
     origin: function (origin, callback) {
+      console.log("Request from:", origin);
+
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.indexOf(origin) === -1) {
+        console.error(`CORS blocked: ${origin}`);
         return callback(new Error("Not allowed by CORS policy"), false);
       }
       return callback(null, true);
