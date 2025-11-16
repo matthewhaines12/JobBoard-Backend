@@ -123,8 +123,8 @@ router.post("/login", async (req, res) => {
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: false, // local dev
-      sameSite: "Strict",
+      secure: process.env.NODE_ENV === "production", // true in production
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
 
@@ -143,8 +143,7 @@ router.post("/refresh", async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
-    if (!refreshToken)
-      return res.status(401).json({ error: "Refresh token does not exist" });
+    if (!refreshToken) return res.status(204).end(); // Silent failure for missing token
 
     const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
 
@@ -155,8 +154,8 @@ router.post("/refresh", async (req, res) => {
     if (!user.verified) {
       res.clearCookie("refreshToken", {
         httpOnly: true,
-        secure: false,
-        sameSite: "Strict",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       });
       return res.status(403).json({
         error: "Email verification required",
@@ -169,8 +168,8 @@ router.post("/refresh", async (req, res) => {
 
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
-      secure: false, // local dev
-      sameSite: "Strict",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
 
@@ -184,8 +183,8 @@ router.post("/refresh", async (req, res) => {
 router.post("/logout", (req, res) => {
   res.clearCookie("refreshToken", {
     httpOnly: true,
-    secure: false, // local dev
-    sameSite: "Strict",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
   });
 
   res.status(200).json({ message: "Successfully logged out" });
