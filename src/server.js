@@ -7,7 +7,6 @@ const jobsRouter = require("./routes/jobs");
 const authRouter = require("./routes/auth");
 const savedJobsRouter = require("./routes/users");
 const Job = require("./models/Job");
-// const User = require("./models/User");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,36 +22,37 @@ mongoose
   })
   .catch((err) => console.error("MongoDB connection error:", err));
 
+// CORS Configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "https://job-junction-mu.vercel.app",
-  process.env.CLIENT_URL,
 ].filter(Boolean);
-
-console.log("Allowed CORS origins:", allowedOrigins);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      console.log("Request from origin:", origin);
-      
+      // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.indexOf(origin) === -1) {
-        const msg = `CORS blocked origin: ${origin}. Allowed: ${allowedOrigins.join(", ")}`;
-        console.error(msg);
-        return callback(new Error(msg), false);
+        return callback(
+          new Error("Not allowed by CORS policy"),
+          false
+        );
       }
       return callback(null, true);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// Middleware
 app.use(express.json());
 app.use(cookieParser());
+
+// Routes
 app.use("/api/jobs", jobsRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", savedJobsRouter);
@@ -63,9 +63,9 @@ app.get("/", (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ 
-    error: err.message || 'Internal server error',
+  console.error("Error:", err.message);
+  res.status(500).json({
+    error: err.message || "Internal server error",
   });
 });
 
