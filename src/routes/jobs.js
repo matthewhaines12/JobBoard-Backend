@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
       field = "",
       deadline = "",
       type = "",
-      limit = 50,
+      limit = 25,
       page = 1,
     } = req.query;
 

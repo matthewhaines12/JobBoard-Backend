@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
+const Job = require("../models/Job");
 const verifyAccessToken = require("../middleware/verifyAccessToken");
 
 // Middleware for all routes below
@@ -10,7 +11,7 @@ router.use(verifyAccessToken);
 router.get("/saved-jobs", async (req, res) => {
   try {
     const userID = req.userID; // from verifyAccessToken middleware
-    const user = await User.findById(userID);
+    const user = await User.findById(userID).populate("savedJobs");
 
     if (!user) return res.status(404).json({ error: "User doesn't exist" });
 
@@ -22,9 +23,9 @@ router.get("/saved-jobs", async (req, res) => {
 });
 
 // save a job
-router.post("/save-jobs/:jobID", async (req, res) => {
+router.post("/save-job", async (req, res) => {
   try {
-    const jobID = req.params.jobID;
+    const jobID = req.body.jobID;
     const userID = req.userID;
 
     const user = await User.findByIdAndUpdate(

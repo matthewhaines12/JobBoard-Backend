@@ -3,17 +3,33 @@ const router = express.Router();
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const sendEmail = require("../utils/sendEmail");
 
 const JWT_ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
 const JWT_REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
+const JWT_EMAIL_SECRET = process.env.EMAIL_TOKEN_SECRET;
+const CLIENT_URL = process.env.CLIENT_URL;
 
 const generateAccessToken = (userID) => {
-  return jwt.sign({ userID }, JWT_ACCESS_SECRET, { expiresIn: "1h" });
+  return jwt.sign({ userID }, JWT_ACCESS_SECRET, { expiresIn: "30m" });
 };
 
 // only stored in the server - http only cookie
 const generateRefreshToken = (userID) => {
   return jwt.sign({ userID }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
+};
+
+const generateEmailToken = (userID) => {
+  return jwt.sign({ userID }, JWT_EMAIL_SECRET, { expiresIn: "10m" });
+};
+
+const isValidPassword = (password) => {
+  if (password.length < 10) return false;
+  if (!/[a-z]/.test(password)) return false;
+  if (!/[A-Z]/.test(password)) return false;
+  if (!/[0-9]/.test(password)) return false;
+  if (!/[^a-zA-Z0-9]/.test(password)) return false;
+  return true;
 };
 
 // Post request - receive data from frontend
@@ -22,11 +38,16 @@ router.post("/signup", async (req, res) => {
     const { email, password } = req.body;
 
     // Validate the input
-    if (!email || !password) {
+    if (!email || !password)
       return res
         .status(400)
         .json({ error: "Please provide email and password" });
-    }
+
+    if (!isValidPassword(password))
+      return res.status(400).json({
+        error:
+          "Password must be at least 10 characters, contain one uppercase letter, one lowercase letter, one number, and one special character",
+      });
 
     const userExists = await User.findOne({ email });
 
@@ -43,23 +64,22 @@ router.post("/signup", async (req, res) => {
     });
     await newUser.save();
 
-    const accessToken = generateAccessToken(newUser._id);
-    const refreshToken = generateRefreshToken(newUser._id);
+    // Verify email
+    const emailToken = generateEmailToken(newUser._id);
+    const verificationURL = `${CLIENT_URL}/verify-email?token=${emailToken}`;
 
-    const userResponse = newUser.toObject();
-    delete userResponse.password; // Remove password object from user
-
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: false, // local dev
-      sameSite: "Strict",
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+    await sendEmail({
+      to: newUser.email,
+      subject: "Verify your JobBoard account",
+      html: `<p>Please click the link below to verify your email:</p>
+           <a href="${verificationURL}">${verificationURL}</a>`,
     });
 
     res.status(201).json({
-      message: "User created successfully and logged in",
-      user: userResponse,
-      accessToken,
+      message:
+        "Signup successful. Please check your email to verify your account before logging in",
+      email: newUser.email,
+      needsVerification: true,
     });
   } catch (err) {
     console.error(err);
@@ -87,6 +107,13 @@ router.post("/login", async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ error: "Invalid email or password" });
 
+    if (!user.verified) {
+      return res.status(403).json({
+        error: "Please verify your email before logging in",
+        needsVerification: true,
+      });
+    }
+
     // generate JWT and return token
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
@@ -105,7 +132,6 @@ router.post("/login", async (req, res) => {
       message: "Successfully logged in",
       user: userResponse,
       accessToken,
-      refreshToken,
     });
   } catch (err) {
     console.error(err);
@@ -125,6 +151,18 @@ router.post("/refresh", async (req, res) => {
     // check if user exists still in db
     const user = await User.findById(decoded.userID);
     if (!user) return res.status(401).json({ error: "User no longer exist" });
+
+    if (!user.verified) {
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: false,
+        sameSite: "Strict",
+      });
+      return res.status(403).json({
+        error: "Email verification required",
+        needsVerification: true,
+      });
+    }
 
     const newAccessToken = generateAccessToken(user._id);
     const newRefreshToken = generateRefreshToken(user._id);
@@ -152,5 +190,31 @@ router.post("/logout", (req, res) => {
 
   res.status(200).json({ message: "Successfully logged out" });
 });
+
+router.get("/verify-email", async (req, res) => {
+  try {
+    const emailToken = req.query.token;
+
+    if (!emailToken) return res.status(401).json({ error: "Token is missing" });
+
+    const decoded = jwt.verify(emailToken, JWT_EMAIL_SECRET);
+
+    const user = await User.findByIdAndUpdate(
+      decoded.userID,
+      { verified: true },
+      { new: true }
+    );
+
+    if (!user) return res.status(401).json({ error: "User doesn't exist" });
+
+    res.status(200).json({ message: "Email is verified" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// *** resend verification endpoint post with email - later feature ***
+// *** reset password and MFA - later feature
 
 module.exports = router;
